@@ -8,7 +8,7 @@ local ffi = require'ffi'
 local lib = ffi.os == 'Windows' and 'libwinpthread-1' or 'pthread'
 local C = ffi.load(lib)
 local H = {} --header namespace
-local M = {C = C, H = H}
+local M = {C = C}
 
 if ffi.os == 'Linux' then
 
@@ -33,7 +33,40 @@ if ffi.os == 'Linux' then
 
 	typedef unsigned long int real_pthread_t;
 	typedef struct { real_pthread_t _; } pthread_t;
+	]]
 
+	if ffi.abi'32bit' then
+	ffi.cdef[[
+	typedef struct pthread_attr_t {
+		union {
+			char __size[36];
+			long int __align;
+		};
+	} pthread_attr_t;
+
+	typedef struct pthread_mutex_t {
+		union {
+			char __size[24];
+			long int __align;
+		};
+	} pthread_mutex_t;
+
+	typedef struct pthread_cond_t {
+		union {
+			char __size[48];
+			long long int __align;
+		};
+	} pthread_cond_t;
+
+	typedef struct pthread_rwlock_t {
+		union {
+			char __size[32];
+			long int __align;
+		};
+	} pthread_rwlock_t;
+	]]
+	else --x64
+	ffi.cdef[[
 	typedef struct pthread_attr_t {
 		union {
 			char __size[56];
@@ -61,7 +94,10 @@ if ffi.os == 'Linux' then
 			long int __align;
 		};
 	} pthread_rwlock_t;
+	]]
+	end
 
+	ffi.cdef[[
 	typedef struct pthread_mutexattr_t {
 		union {
 			char __size[4];
@@ -119,7 +155,47 @@ elseif ffi.os == 'OSX' then
 
 	typedef void *real_pthread_t;
 	typedef struct { real_pthread_t _; } pthread_t;
+	]]
 
+	if ffi.abi'32bit' then
+	ffi.cdef[[
+	typedef struct pthread_attr_t {
+		long __sig;
+		char __opaque[36];
+	} pthread_attr_t;
+
+	typedef struct pthread_mutex_t {
+		long __sig;
+		char __opaque[40];
+	} pthread_mutex_t;
+
+	typedef struct pthread_cond_t {
+		long __sig;
+		char __opaque[24];
+	} pthread_cond_t;
+
+	typedef struct pthread_rwlock_t {
+		long __sig;
+		char __opaque[124];
+	} pthread_rwlock_t;
+
+	typedef struct pthread_mutexattr_t {
+		long __sig;
+		char __opaque[8];
+	} pthread_mutexattr_t;
+
+	typedef struct pthread_condattr_t {
+		long __sig;
+		char __opaque[4];
+	} pthread_condattr_t;
+
+	typedef struct pthread_rwlockattr_t {
+		long __sig;
+		char __opaque[12];
+	} pthread_rwlockattr_t;
+	]]
+	else --x64
+	ffi.cdef[[
 	typedef struct pthread_attr_t {
 		long __sig;
 		char __opaque[56];
@@ -154,7 +230,10 @@ elseif ffi.os == 'OSX' then
 		long __sig;
 		char __opaque[16];
 	} pthread_rwlockattr_t;
+	]]
+	end
 
+	ffi.cdef[[
 	struct sched_param {
 		int sched_priority;
 		char __opaque[4];
@@ -174,7 +253,11 @@ elseif ffi.os == 'OSX' then
 
 elseif ffi.os == 'Windows' then
 
-	ffi.cdef'typedef int64_t time_t;'
+	if ffi.abi'32bit' then
+		ffi.cdef'typedef int32_t time_t;'
+	else
+		ffi.cdef'typedef int64_t time_t;'
+	end
 
 	ffi.cdef[[
 	enum {
@@ -315,7 +398,7 @@ end
 --create a new thread with a C callback. to use with a Lua callback,
 --create a Lua state and a ffi callback pointing to a function inside
 --the state, and use that as func_cb.
-function M.new(func_cb, attrs, ud)
+function M.new(func_cb, attrs)
 	local thread = ffi.new'pthread_t'
 	local attr
 	if attrs then
@@ -337,7 +420,7 @@ function M.new(func_cb, attrs, ud)
 			checkz(C.pthread_attr_setstacksize(attr, attrs.stacksize))
 		end
 	end
-	local ret = C.pthread_create(thread, attr, func_cb, ud)
+	local ret = C.pthread_create(thread, attr, func_cb, nil)
 	if attr then
 		C.pthread_attr_destroy(attr)
 	end

@@ -1,54 +1,64 @@
+---
+tagline: POSIX threads
+platforms: mingw, linux, osx
+---
 
 ## `local pthread = require'pthread'`
 
-POSIX threads. Emulated in Windows by the [winpthreads] library from MinGW-w64.
+A lightweight ffi binding of POSIX threads. Includes [winpthreads] from
+MinGW-w64 for Windows support (uses the pthread library found on the
+system otherwise).
 
-[winpthreads]: https://sourceforge.net/p/mingw-w64/mingw-w64/ci/master/tree/mingw-w64-libraries/winpthreads/
+[winpthreads]: http://sourceforge.net/p/mingw-w64/mingw-w64/ci/master/tree/mingw-w64-libraries/winpthreads/
+
+__NOTE:__ pthread only works on a luajit binary that was compiled with
+`-pthread`. The [luajit] binary from luapower was compiled this way.
 
 ## API
 
-| API                                             | Description |
-| :---                                            | :---        |
-| __threads__                                     |
-| `pthread.new(func_ptr[, attrs]) -> th`          | create and start a new thread
-| `th:equal(other_th) -> true | false`            | check if two threads are equal
-| `th:join() -> status`                           | wait for a thread to finish
-| `th:detach()`                                   | detach a thread
-| `th:priority(new_priority)`                     | set thread priority
-| `th:priority() -> priority`                     | get thread priority
-| `pthread.min_priority() -> priority`            | get min. priority
-| `pthread.max_priority() -> priority`            | get max. priority
-| `pthread.yield()`                               | relinquish control to the scheduler
-| __mutexes__                                     |
-| `pthread.mutex([mattrs]) -> mutex`              | create a mutex
-| `mutex:free()`                                  | free a mutex
-| `mutex:lock()`                                  | lock a mutex
-| `mutex:unlock()`                                | unlock a mutex
-| `mutex:trylock() -> true | false`               | lock a mutex or return false
-| __condition variables__                         |
-| `pthread.cond() -> cond`                        | create a condition variable
-| `cond:free()`                                   | free the condition variable
-| `cond:broadcast()`                              | broadcast
-| `cond:signal()`                                 | signal
-| `cond:wait(mutex[, timeout]) -> true | false`   | wait with optional timeout (*)
-| __read/write locks__                            |
-| `pthread.rwlock() -> rwlock`                    | create a r/w lock
-| `rwlock:free()`                                 | free a r/w lock
-| `rwlock:writelock()`                            | lock for writing
-| `rwlock:readlock()`                             | lock for reading
-| `rwlock:trywritelock() -> true | false`         | try to lock for writing
-| `rwlock:tryreadlock() -> true | false`          | try to lock for reading
-| `rwlock:unlock()`                               | unlock the r/w lock
+----------------------------------------------- ----------------------------------
+__threads__
+`pthread.new(func_ptr[, attrs]) -> th`          create and start a new thread
+`th:equal(other_th) -> true | false`            check if two threads are equal
+`th:join() -> status`                           wait for a thread to finish
+`th:detach()`                                   detach a thread
+`th:priority(new_priority)`                     set thread priority
+`th:priority() -> priority`                     get thread priority
+`pthread.min_priority() -> priority`            get min. priority
+`pthread.max_priority() -> priority`            get max. priority
+__mutexes__
+`pthread.mutex([mattrs]) -> mutex`              create a mutex
+`mutex:free()`                                  free a mutex
+`mutex:lock()`                                  lock a mutex
+`mutex:unlock()`                                unlock a mutex
+`mutex:trylock() -> true | false`               lock a mutex or return false
+__condition variables__
+`pthread.cond() -> cond`                        create a condition variable
+`cond:free()`                                   free the condition variable
+`cond:broadcast()`                              broadcast
+`cond:signal()`                                 signal
+`cond:wait(mutex[, timeout]) -> true | false`   wait with optional timeout (*)
+__read/write locks__
+`pthread.rwlock() -> rwlock`                    create a r/w lock
+`rwlock:free()`                                 free a r/w lock
+`rwlock:writelock()`                            lock for writing
+`rwlock:readlock()`                             lock for reading
+`rwlock:trywritelock() -> true | false`         try to lock for writing
+`rwlock:tryreadlock() -> true | false`          try to lock for reading
+`rwlock:unlock()`                               unlock the r/w lock
+__scheduler__
+`pthread.yield()`                               relinquish control to the scheduler
+----------------------------------------------- ----------------------------------
 
-> (*) timeout is an os.time() or `time.time()` timestamp, not a time period.
+> (*) timeout is an os.time() or [time].time() timestamp, not a time period.
 
 __NOTE:__ All functions raise errors but error messages are not included
-and error codes are platform specific. Use `c/precompile errno.h | grep CODE`
+and error codes are platform specific. Use `mgit precompile errno.h | grep CODE`
 to search for specific codes.
 
 ## Howto
 
-Use it with [luastate](luastate.md):
+Use it with [luastate]:
 
 ~~~{.lua}
 local ffi = require'ffi'
@@ -64,12 +74,12 @@ state:openlibs()
 --create a callback into the Lua state to be called from a different thread
 state:push(function()
 
-	--up-values are not copied, so we have to require ffi again.
+	--up-values are not copied unless we ask, so we have to require ffi again
 	local ffi = require'ffi'
 
-	--this is our worker function that will run in a different thread.
+	--this is our worker function that will run in a different thread
 	local function worker()
-		--print() is thread-safe so no need to guard it.
+		--print() is thread-safe so no need to guard it
 		print'Hello from thread!'
 	end
 
@@ -87,16 +97,16 @@ state:push(function()
 end)
 
 --call the function that we just pushed into the Lua state
---to get the callback pointer.
+--to get the callback pointer
 local worker_cb_ptr = ffi.cast('void*', state:call())
 
---create a thread which will start running automatically.
+--create a thread which will start running automatically
 local thread = pthread.new(worker_cb_ptr)
 
---wait for the thread to finish.
+--wait for the thread to finish
 thread:join()
 
---close the Lua state.
+--close the Lua state
 state:close()
 ~~~
 
@@ -133,11 +143,8 @@ Create a mutex. The optional mattrs table can have the fields:
     in an error being raised.
 
 
-## Building notes
 
-This library only works on a LuaJIT binary that was compiled with `-pthread`.
-
-## Implementation notes
+## Portability notes
 
 POSIX is a standard indifferent to binary compatibility, resulting in each
 implementation having a different ABI. Moreso, different implementations
@@ -145,9 +152,9 @@ cover different parts of the API.
 
 The list of currently supported pthreads implementations are:
 
-  * winpthreads 9.0.0 from Mingw-w64 (tested on Windows 10 64bit)
-  * libpthread from GNU libc (tested on Ubuntu 10.04 x64)
-  * libpthread from OSX (tested on OSX 10.9 64bit)
+  * winpthreads 0.5.0 from Mingw-w64 4.9.2 (tested on WinXP 32bit and 64bit)
+  * libpthread from GNU libc (tested on Ubuntu 10.04, x86 and x64)
+  * libpthread from OSX (tested on OSX 10.9 with 32bit and 64bit binaries)
 
 Only functionality that is common _to all_ of the above is available.
 Winpthreads dumbs down the API the most (no process-shared objects,
@@ -170,18 +177,18 @@ and compare them:
 
 	On Linux:
 
-		c/syms /lib/libpthread.so.0 | \
+		mgit syms /lib/libpthread.so.0 | \
 			grep '^pthread' > pthread_syms_linux.txt
 
 	On OSX:
 
-		(c/syms /usr/lib/libpthread.dylib
-		c/syms /usr/lib/system/libsystem_pthread.dylib) | \
+		(mgit syms /usr/lib/libpthread.dylib
+		mgit syms /usr/lib/system/libsystem_pthread.dylib) | \
 			grep '^pthread' > pthread_syms_osx.txt
 
 	On Windows:
 
-		c/syms bin\mingw64\libwinpthread-1.dll | \
+		mgit syms bin\mingw64\libwinpthread-1.dll | \
 			grep ^^pthread > pthread_syms_mingw.txt
 
 	Compare the results (the first column tells the number of platforms
@@ -192,7 +199,7 @@ and compare them:
 To find out the differences in ABI and supported flags, you can preprocess
 the headers on different platforms and compare them:
 
-	c/preprocess pthread.h sched.h semaphore.h > pthread_h_<platform>.lua
+	mgit preprocess pthread.h sched.h semaphore.h > pthread_h_<platform>.lua
 
 The above will use gcc to preprocess the headers and generate a
 (very crude, mind you) Lua cdef template file that you can use
